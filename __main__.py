@@ -25,6 +25,7 @@ import Queue
 import socket
 import ast
 import pprint
+import numpy as np
 
 # Evaluation of globals happens in a thread with the pylab module imported.
 # Although we don't care about plotting, importing pylab makes Qt calls. We
@@ -499,6 +500,82 @@ class AlternatingColorModel(QtGui.QStandardItemModel):
         return QtGui.QStandardItemModel.data(self, index, role)
 
 
+class ArrowFilter(QtCore.QObject):
+    """
+    A Event filter for the TableView editors, that allows quick changing of number values
+    """
+    def eventFilter(self, obj, event):
+        if event.type() == event.KeyPress and obj == self.parent():
+            key = event.key()
+            # handle arrow keys
+            if key in (QtCore.Qt.Key_Up, QtCore.Qt.Key_Down, QtCore.Qt.Key_Right, QtCore.Qt.Key_Left):
+                # try float conversion only handle Event if this succeeds
+                try:
+                    new_value = float(str(obj.text()))
+                except ValueError:
+                    return False
+                else:
+                    event.accept()
+
+                if not hasattr(self, 'stepsize'):
+                    self.stepsize = 1.0  # initialize stepsize
+                if key == QtCore.Qt.Key_Left:
+                    self.stepsize *= 10.0  # increase stepsize by factor 10
+                elif key == QtCore.Qt.Key_Right:
+                    self.stepsize /= 10.0  # reduce stepsize by factor 10
+                else:
+                    if key == QtCore.Qt.Key_Up:
+                        new_value += 1 * self.stepsize  # increase value
+                    elif key == QtCore.Qt.Key_Down:
+                        new_value -= 1 * self.stepsize  # reduce value
+
+                # Convert the new value to string strip of all tailing zeros but one
+                new_text = "{:f}".format(new_value).rstrip('0')
+                # determin current stepsize digit
+                digit = int(np.floor(np.log10(self.stepsize)))
+
+                dicimalpoint = new_text.index('.')
+                if digit < 0:
+                    select_pos = dicimalpoint - digit
+                else:
+                    select_pos = dicimalpoint - digit - 1
+
+                # Append additional zeros for the display of current stepsize digit
+                if select_pos + 1 > len(new_text):
+                    diff = np.abs(select_pos + 1 - len(new_text))
+                    new_text = "{}{}".format(new_text, "0" * diff)
+                elif select_pos <= 0:
+                    diff = np.abs(select_pos)
+                    new_text = "{}{}".format("0" * diff, new_text)
+                    select_pos = 0
+
+                # update Value and select current stepsize digit
+                obj.setText(new_text.rstrip('.'))
+                obj.setSelection(select_pos, 1)
+
+                return True
+            # handle enter (edit finished)
+            if key in (QtCore.Qt.Key_Enter, QtCore.Qt.Key_Return):
+                # try float conversion only handle Event if this succeeds
+                try:
+                    new_value = float(str(obj.text()))
+                except ValueError:
+                    return False
+                else:
+                    # convert to int if possible
+                    if new_value.is_integer():
+                        new_value = int(new_value)
+                    obj.setText(str(new_value))
+        return False
+
+
+class CustomEditorCreator(QtGui.QItemEditorCreatorBase):
+    def createWidget(self, parent):
+        editor = QtGui.QLineEdit(parent)
+        editor.installEventFilter(ArrowFilter(editor))
+        return editor
+
+
 class ItemDelegate(QtGui.QStyledItemDelegate):
 
     """An item delegate with a fixed height and faint grey vertical lines
@@ -513,6 +590,10 @@ class ItemDelegate(QtGui.QStyledItemDelegate):
         fontmetrics = QtGui.QFontMetrics(treeview.font())
         text_height = fontmetrics.height()
         self.height = text_height + self.EXTRA_ROW_HEIGHT
+
+        factory = QtGui.QItemEditorFactory()
+        factory.registerEditor(QtCore.QVariant.String, CustomEditorCreator())
+        self.setItemEditorFactory(factory)
 
     def sizeHint(self, *args):
         size = QtGui.QStyledItemDelegate.sizeHint(self, *args)
