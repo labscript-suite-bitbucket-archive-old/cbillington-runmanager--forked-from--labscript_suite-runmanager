@@ -22,7 +22,14 @@ import types
 import threading
 import traceback
 
+try:
+    from labscript_utils import check_version
+except ImportError:
+    raise ImportError('Require labscript_utils > 2.1.0')
+check_version('labscript_utils', '2', '3')
+
 import labscript_utils.h5_lock
+from labscript_utils.labconfig import LabConfig
 import h5py
 import numpy as np
 
@@ -33,6 +40,9 @@ __version__ = '2.2.0'
 if not sys.version < '3':
     unicode = str
 
+# labconfig for determining which batch_compiler script to run
+labconfig = LabConfig()
+    
 def is_valid_python_identifier(name):
     import tokenize
     import StringIO
@@ -675,7 +685,10 @@ def compile_labscript_async(labscript_file, run_file, stream_port, done_callback
     will be shoveled into stream_port via zmq push as it spews forth, and
     when compilation is complete, done_callback will be called with a
     boolean argument indicating success."""
-    compiler_path = os.path.join(os.path.dirname(__file__), 'batch_compiler_labscript.py')
+    try:
+        compiler_path = labconfig.get('runmanager', 'batch_compiler_script')
+    except (LabConfig.NoOptionError, LabConfig.NoSectionError):
+        compiler_path = os.path.join(os.path.dirname(__file__), 'batch_compiler_labscript.py')
     to_child, from_child, child = zprocess.subprocess_with_queues(compiler_path, stream_port)
     to_child.put(['compile', [labscript_file, run_file]])
     while True:
@@ -697,7 +710,10 @@ def compile_multishot_async(labscript_file, run_files, stream_port, done_callbac
     and when each compilation is complete, done_callback will be called
     with a boolean argument indicating success. Compilation will stop
     after the first failure."""
-    compiler_path = os.path.join(os.path.dirname(__file__), 'batch_compiler_labscript.py')
+    try:
+        compiler_path = labconfig.get('runmanager', 'batch_compiler_script')
+    except (LabConfig.NoOptionError, LabConfig.NoSectionError):
+        compiler_path = os.path.join(os.path.dirname(__file__), 'batch_compiler_labscript.py')
     to_child, from_child, child = zprocess.subprocess_with_queues(compiler_path, stream_port)
     try:
         for run_file in run_files:

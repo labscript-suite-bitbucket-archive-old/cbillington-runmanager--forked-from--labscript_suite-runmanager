@@ -1335,8 +1335,15 @@ class RunManager(object):
         self.compile_queue_thread.start()
 
         # Start the compiler subprocess:
-        self.to_child, self.from_child, self.child = zprocess.subprocess_with_queues(
-            'batch_compiler_labscript.py', self.output_box.port)
+        try:
+            self.batch_compiler_script_path = self.exp_config.get('runmanager', 'batch_compiler_script')
+        except (LabConfig.NoOptionError, LabConfig.NoSectionError):
+            self.batch_compiler_script_path = 'batch_compiler_labscript.py'
+        try:
+            self.to_child, self.from_child, self.child = zprocess.subprocess_with_queues(
+                self.batch_compiler_script_path, self.output_box.port)
+        except RuntimeError:
+            raise RuntimeError('Failed to start subprocess for compiling HDF5 files. Does %s exist?\nYou may also want to check the value of runmanager/batch_compiler_script in your labconfig file.\n'%self.batch_compiler_script_path)
 
         # Start a thread to monitor the time of day and create new shot output
         # folders for each day:
@@ -1757,8 +1764,12 @@ class RunManager(object):
         else:
             self.output_box.output('done.\n')
         self.output_box.output('Spawning new compiler subprocess...')
-        self.to_child, self.from_child, self.child = zprocess.subprocess_with_queues(
-            'batch_compiler_labscript.py', self.output_box.port)
+        
+        try:
+            self.to_child, self.from_child, self.child = zprocess.subprocess_with_queues(
+                self.batch_compiler_script_path, self.output_box.port)
+        except RuntimeError:
+            self.output_box.output('Failed to start subprocess. Does %s exist?\n\n'%self.batch_compiler_script_path, red=True)
         self.output_box.output('done.\n')
         self.output_box.output('Ready.\n\n')
 
