@@ -33,7 +33,7 @@ class BatchProcessor(BatchProcessorBase):
         labscript.labscript_init(run_file, labscript_file=labscript_file, load_globals_values=False)
         
     def module_cleanup(self, labscript_file, run_file):
-        labscript.labscript_cleanup(cleanup_globals=False)
+        labscript.labscript_cleanup()
         
     def module_protected_global_names(self):
         return labscript.__dict__.keys()
