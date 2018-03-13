@@ -30,10 +30,10 @@ class BatchProcessor(BatchProcessorBase):
     module_name = "labscript"
     
     def module_init(self, labscript_file, run_file):
-        labscript.labscript_init(run_file, labscript_file=labscript_file)
+        labscript.labscript_init(run_file, labscript_file=labscript_file, load_globals_values=False)
         
     def module_cleanup(self, labscript_file, run_file):
-        labscript.labscript_cleanup()
+        labscript.labscript_cleanup(cleanup_globals=False)
         
     def module_protected_global_names(self):
         return labscript.__dict__.keys()
