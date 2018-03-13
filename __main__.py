@@ -1336,7 +1336,7 @@ class RunManager(object):
 
         # Start the compiler subprocess:
         self.to_child, self.from_child, self.child = zprocess.subprocess_with_queues(
-            'batch_compiler.py', self.output_box.port)
+            'batch_compiler_labscript.py', self.output_box.port)
 
         # Start a thread to monitor the time of day and create new shot output
         # folders for each day:
@@ -1758,7 +1758,7 @@ class RunManager(object):
             self.output_box.output('done.\n')
         self.output_box.output('Spawning new compiler subprocess...')
         self.to_child, self.from_child, self.child = zprocess.subprocess_with_queues(
-            'batch_compiler.py', self.output_box.port)
+            'batch_compiler_labscript.py', self.output_box.port)
         self.output_box.output('done.\n')
         self.output_box.output('Ready.\n\n')
 
