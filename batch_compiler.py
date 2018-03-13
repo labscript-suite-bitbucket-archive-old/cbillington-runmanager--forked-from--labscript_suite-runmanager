@@ -27,21 +27,15 @@ class GlobalNameError(Exception):
 
 class BatchProcessorBase(object):
     module_name = "your module"
-    def __init__(self, to_parent, from_parent, kill_lock, module_watcher):
-        self.to_parent = to_parent
-        self.from_parent = from_parent
-        self.kill_lock = kill_lock
-        self.module_watcher = module_watcher
-        self.mainloop()
         
-    def mainloop(self):
+    def mainloop(self, to_parent, from_parent, kill_lock, module_watcher):
         while True:
-            signal, data =  self.from_parent.get()
+            signal, data =  from_parent.get()
             if signal == 'compile':
                 # Do not let the modulewatcher unload any modules whilst we're working:
-                with self.kill_lock, self.module_watcher.lock:
+                with kill_lock, module_watcher.lock:
                     success = self.compile(*data)
-                self.to_parent.put(['done',success])
+                to_parent.put(['done',success])
             elif signal == 'quit':
                 sys.exit(0)
             else:
@@ -115,7 +109,4 @@ class BatchProcessorBase(object):
                 else:
                     _builtins_dict[name] = _existing_builtins_dict[name]
             self.module_cleanup(labscript_file, run_file)
-                   
-if __name__ == '__main__':
-    module_watcher = ModuleWatcher() # Make sure modified modules are reloaded
-    batch_processor = BatchProcessorBase(to_parent,from_parent,kill_lock, module_watcher)
+            

@@ -11,11 +11,6 @@
 #                                                                   #
 #####################################################################
 
-import sys
-import traceback
-from zprocess import setup_connection_with_parent
-to_parent, from_parent, kill_lock = setup_connection_with_parent(lock = True)
-
 try:
     from labscript_utils import check_version
 except ImportError:
@@ -29,7 +24,7 @@ import labscript
 import labscript_utils.excepthook
 from labscript_utils.modulewatcher import ModuleWatcher
 
-from runmanager.batch_compiler_base import BatchProcessorBase
+from runmanager.batch_compiler import BatchProcessorBase
 
 class BatchProcessor(BatchProcessorBase):
     module_name = "labscript"
@@ -45,5 +40,9 @@ class BatchProcessor(BatchProcessorBase):
                  
                    
 if __name__ == '__main__':
+    from zprocess import setup_connection_with_parent
+    to_parent, from_parent, kill_lock = setup_connection_with_parent(lock = True)
+    
     module_watcher = ModuleWatcher() # Make sure modified modules are reloaded
-    batch_processor = BatchProcessor(to_parent,from_parent,kill_lock, module_watcher)
+    batch_processor = BatchProcessor()
+    batch_processor.mainloop(to_parent,from_parent,kill_lock, module_watcher)
