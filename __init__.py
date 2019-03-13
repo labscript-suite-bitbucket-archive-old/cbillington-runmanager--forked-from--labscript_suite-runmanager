@@ -30,6 +30,7 @@ import subprocess
 import types
 import threading
 import traceback
+import errno
 
 import labscript_utils.h5_lock
 import h5py
@@ -45,6 +46,16 @@ __version__ = '2.2.0'
 def _ensure_str(s):
     """convert bytestrings and numpy strings to python strings"""
     return s.decode() if isinstance(s, bytes) else str(s)
+
+
+def mkdir_p(path):
+    """Make directory and all parent directories, ignoring errors if they already
+    exist"""
+    try:
+        os.makedirs(path)
+    except OSError as exc:
+        if exc.errno != errno.EEXIST or not os.path.isdir(path):
+            raise
 
 
 def is_valid_python_identifier(name):
@@ -624,6 +635,7 @@ def make_single_run_file(filename, sequenceglobals, runglobals, sequence_id, run
     must be provided, if this run file is part of a sequence, then they
     should reflect how many run files are being generated which share
     this sequence_id."""
+    mkdir_p(os.path.dirname(filename))
     with h5py.File(filename, 'w') as f:
         f.attrs['sequence_id'] = sequence_id
         f.attrs['run number'] = run_no
