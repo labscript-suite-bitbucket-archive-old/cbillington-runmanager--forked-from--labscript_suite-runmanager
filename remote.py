@@ -16,14 +16,6 @@ class Client(RPCClient):
         self.require_server_version('runmanager', '2.6', '3.0')
         RPCClient.__init__(self, host=host, port=port)
 
-    def say_hello(self):
-        """Ping the runmanager server for a response"""
-        return self.request('hello')
-
-    def get_version(self):
-        """Return the version of runmanager the server is running in"""
-        return self.request('get_version', 'runmanager')
-
     def get_globals(self, raw=False):
         """Return all active globals as a dict of the form: {'<global_name>': value}. If
         raw=True, then the global values are returned as their string representations,
