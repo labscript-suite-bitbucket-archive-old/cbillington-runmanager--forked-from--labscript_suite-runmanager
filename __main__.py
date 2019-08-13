@@ -27,7 +27,7 @@ try:
 except ImportError:
     raise ImportError('Require labscript_utils > 2.1.0')
 
-check_version('labscript_utils', '2.10.0', '3')
+check_version('labscript_utils', '2.15.0', '3')
 # Splash screen
 from labscript_utils.splash import Splash
 splash = Splash(os.path.join(os.path.dirname(__file__), 'runmanager.svg'))
@@ -64,8 +64,7 @@ from qtutils.qt import QtCore, QtGui, QtWidgets
 from qtutils.qt.QtCore import pyqtSignal as Signal
 
 splash.update_text('importing labscript suite modules')
-check_version('labscript_utils', '2.11.0', '3')
-from labscript_utils.ls_zprocess import zmq_get, ProcessTree, ZMQServer
+from labscript_utils.ls_zprocess import zmq_get, ProcessTree, RPCServer, InvalidRequest
 from labscript_utils.labconfig import LabConfig
 from labscript_utils.setup_logging import setup_logging
 import labscript_utils.shared_drive as shared_drive
@@ -3584,12 +3583,14 @@ class RunManager(object):
             self.output_box.output('Couldn\'t submit shot to runviewer: %s\n\n' % str(e), red=True)
 
 
-class RemoteServer(ZMQServer):
+class RemoteServer(RPCServer):
+    server_name = 'runmanager'
+
     def __init__(self):
         port = app.exp_config.getint(
             'ports', 'runmanager', fallback=runmanager.remote.DEFAULT_PORT
         )
-        ZMQServer.__init__(self, port=port)
+        RPCServer.__init__(self, port=port)
 
     def handle_get_globals(self, raw=False):
         active_groups = inmain(app.get_active_groups, interactive=False)
@@ -3751,7 +3752,7 @@ class RemoteServer(ZMQServer):
     def handle_reset_shot_output_folder(self):
         app.on_reset_shot_output_folder_clicked(None)
 
-    def handler(self, request_data):
+    def fallback_handler(self, request_data):
         cmd, args, kwargs = request_data
         if cmd == 'hello':
             return 'hello'
