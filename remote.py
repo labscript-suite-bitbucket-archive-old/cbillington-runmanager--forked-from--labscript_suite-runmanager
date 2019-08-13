@@ -1,23 +1,20 @@
 DEFAULT_PORT = 42523
 
-from labscript_utils.ls_zprocess import ZMQClient
+from labscript_utils.ls_zprocess import RPCClient
 from labscript_utils.labconfig import LabConfig
 
 
-class Client(ZMQClient):
+class Client(RPCClient):
     """A ZMQClient for communication with runmanager"""
+    server_name = 'runmanager'
 
     def __init__(self, host=None, port=None):
-        ZMQClient.__init__(self)
         if host is None:
             host = LabConfig().get('servers', 'runmanager', fallback='localhost')
         if port is None:
             port = LabConfig().getint('ports', 'runmanager', fallback=DEFAULT_PORT)
-        self.host = host
-        self.port = port
-
-    def request(self, command, *args, **kwargs):
-        return self.get(self.port, self.host, data=[command, args, kwargs], timeout=15)
+        self.require_server_version('runmanager', '2.6', '3.0')
+        RPCClient.__init__(self, host=host, port=port)
 
     def say_hello(self):
         """Ping the runmanager server for a response"""
@@ -25,7 +22,7 @@ class Client(ZMQClient):
 
     def get_version(self):
         """Return the version of runmanager the server is running in"""
-        return self.request('__version__')
+        return self.request('get_version', 'runmanager')
 
     def get_globals(self, raw=False):
         """Return all active globals as a dict of the form: {'<global_name>': value}. If
