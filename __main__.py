@@ -64,7 +64,7 @@ from qtutils.qt import QtCore, QtGui, QtWidgets
 from qtutils.qt.QtCore import pyqtSignal as Signal
 
 splash.update_text('importing labscript suite modules')
-from labscript_utils.ls_zprocess import zmq_get, ProcessTree, RPCServer, InvalidRequest
+from labscript_utils.ls_zprocess import zmq_get, ProcessTree, RPCServer
 from labscript_utils.labconfig import LabConfig
 from labscript_utils.setup_logging import setup_logging
 import labscript_utils.shared_drive as shared_drive
