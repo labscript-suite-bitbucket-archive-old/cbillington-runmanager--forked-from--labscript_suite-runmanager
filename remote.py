@@ -1,5 +1,6 @@
 DEFAULT_PORT = 42523
 
+import runmananger
 from labscript_utils.ls_zprocess import RPCClient
 from labscript_utils.labconfig import LabConfig
 
@@ -14,7 +15,7 @@ class Client(RPCClient):
         if port is None:
             port = LabConfig().getint('ports', 'runmanager', fallback=DEFAULT_PORT)
         self.require_server_version('runmanager', '2.6.0', '3.0')
-        self.declare_client_version('runmanager', '2.6.0')
+        self.declare_client_version('runmanager', runmanager.__version__)
         RPCClient.__init__(self, host=host, port=port)
 
     def get_globals(self, raw=False):
