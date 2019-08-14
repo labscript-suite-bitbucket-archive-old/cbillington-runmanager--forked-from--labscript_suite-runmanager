@@ -1,6 +1,6 @@
 DEFAULT_PORT = 42523
 
-import runmananger
+import runmanager
 from labscript_utils.ls_zprocess import RPCClient
 from labscript_utils.labconfig import LabConfig
 
