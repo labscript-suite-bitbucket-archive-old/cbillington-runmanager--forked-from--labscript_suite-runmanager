@@ -13,7 +13,8 @@ class Client(RPCClient):
             host = LabConfig().get('servers', 'runmanager', fallback='localhost')
         if port is None:
             port = LabConfig().getint('ports', 'runmanager', fallback=DEFAULT_PORT)
-        self.require_server_version('runmanager', '2.6', '3.0')
+        self.require_server_version('runmanager', '2.6.0', '3.0')
+        self.declare_client_version('runmanager', '2.6.0')
         RPCClient.__init__(self, host=host, port=port)
 
     def get_globals(self, raw=False):
