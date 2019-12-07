@@ -74,6 +74,8 @@ from zprocess import raise_exception_in_thread
 import runmanager
 import runmanager.remote
 
+from runmanager.digit_incrementing import increment_at_index, is_digit
+
 from qtutils import (
     inmain,
     inmain_decorator,
@@ -574,7 +576,7 @@ class AlternatingColorModel(QtGui.QStandardItemModel):
 
 class Editor(QtWidgets.QTextEdit):
     """Popup editor with word wrapping and automatic resizing."""
-    def __init__(self, parent):
+    def __init__(self, parent, index, delegate):
         QtWidgets.QTextEdit.__init__(self, parent)
         self.setWordWrapMode(QtGui.QTextOption.WordWrap)
         self.setAcceptRichText(False)
@@ -582,6 +584,124 @@ class Editor(QtWidgets.QTextEdit):
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.textChanged.connect(self.update_size)
         self.initial_height = None
+        self.index = index
+        self.delegate = delegate
+        self.cursorPositionChanged.connect(self.check_arrow_switching)
+        self.selectionChanged.connect(self.check_arrow_switching)
+        self.textChanged.connect(self.check_arrow_switching)
+        self.initial_data = None
+        self.already_committed = False
+        self._commit_timer = None
+
+    def check_arrow_switching(self):
+        """If the cursor is at a digit of a numeric literal, the text is a single line,
+        and there is no selection, mark the digit that would be incremented/decremented
+        by arrow keys as an "extra selection" with a subtle higlight. paintEvent() will
+        render arrows above and below the highlight, and keyPressEvent will modify the
+        number upon pressing up or down."""
+        cursor = self.textCursor()
+        pos = cursor.position()
+        text = self.toPlainText()
+        if (
+            pos
+            and pos == cursor.anchor()
+            and '\n' not in text
+            and is_digit(text, pos - 1)
+        ):
+            cursor.clearSelection()
+            cursor.movePosition(cursor.PreviousCharacter, cursor.KeepAnchor)
+            selection = QtWidgets.QTextEdit.ExtraSelection()
+            selection.cursor = cursor
+            selection.format.setProperty(QtGui.QTextFormat.FullWidthSelection, True)
+            selection.format.setBackground(QtGui.QBrush(QtGui.QColor("#eeeeee")))
+            self.setExtraSelections([selection])
+
+        else:
+            self.setExtraSelections([])
+
+    def paintEvent(self, event):
+        result =  QtWidgets.QTextEdit.paintEvent(self, event)
+        if self.extraSelections():
+            # Draw little arrows above and below the current digit:
+            cursor = self.textCursor()
+            cursor.setPosition(cursor.position() - 1)
+            char = self.toPlainText()[cursor.position()]
+            char_width = QtGui.QFontMetrics(self.currentFont()).width(char)
+            cursor_rect = self.cursorRect(cursor)
+
+            rect = QtCore.QRectF(
+                cursor_rect.x() - 0.5,
+                cursor_rect.y(),
+                char_width,
+                cursor_rect.height(),
+            )
+            top_middle = QtCore.QPointF((rect.left() + rect.right()) / 2, rect.top())
+            bottom_middle = QtCore.QPointF(
+                (rect.left() + rect.right()) / 2, rect.bottom()
+            )
+            triangle = [
+                QtCore.QPointF(0, -1),
+                QtCore.QPointF(3, 1),
+                QtCore.QPointF(-3, 1),
+            ]
+            painter = QtGui.QPainter(self.viewport())
+            painter.setBrush(QtGui.QBrush(QtGui.QColor("#000000")))
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.setRenderHints(painter.Antialiasing)
+            painter.drawPolygon(
+                top_middle + triangle[0],
+                top_middle + triangle[1],
+                top_middle + triangle[2],
+            )
+            painter.drawPolygon(
+                bottom_middle - triangle[0],
+                bottom_middle - triangle[1],
+                bottom_middle - triangle[2],
+            )
+            
+            painter.end()
+        return result
+
+    def keyPressEvent(self, event):
+        if (
+            self.extraSelections()
+            and event.key() in (QtCore.Qt.Key_Up, QtCore.Qt.Key_Down,)
+            and not event.modifiers()
+        ):
+            if event.key() == QtCore.Qt.Key_Up:
+                increment = +1
+            else:
+                increment = -1
+            text = self.toPlainText()
+            cursor = self.textCursor()
+            index = cursor.position() - 1
+            text, offset = increment_at_index(text, index, increment)
+            cursor.beginEditBlock()
+            cursor.select(cursor.Document)
+            cursor.deleteChar()
+            cursor.insertText(text)
+            cursor.setPosition(index + offset + 1)
+            cursor.endEditBlock()
+            self.setTextCursor(cursor)
+            # We only need one of these slots queued up to commit the data, since it
+            # will commit the most recent data when it runs. This prevents the GUI
+            # lagging when the user holds down the key:
+            if self._commit_timer is None:
+                self._commit_timer = QtCore.QTimer.singleShot(0, self.commit_data)
+        return QtWidgets.QTextEdit.keyPressEvent(self, event)
+
+    def commit_data(self):
+        self.delegate.commitData.emit(self)
+        self._commit_timer = None
+        self.already_committed = True
+
+    def cancel(self):
+        if self._commit_timer is not None:
+            self._commit_timer.stop()
+        if self.already_committed:
+            # Reset to initial data:
+            self.setPlainText(self.initial_data)
+            self.delegate.commitData.emit(self)
 
     def update_size(self):
         if self.initial_height is not None:
@@ -617,6 +737,12 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
         self._pen = QtGui.QPen()
         self._pen.setWidth(1)
         self._pen.setColor(QtGui.QColor.fromRgb(128, 128, 128, 64))
+        # If the user cancels editing, but the data was already committed, we reset the
+        # original data. We don't want this restoration of the original data to be
+        # treated by the GUI as a user-initiated edit, so we set this flag when we do it
+        # so that GroupTab.on_globals_model_value_changed can see it and declare it a
+        # "non-interactive" change.
+        self.cancellation_in_progress = False
 
     def sizeHint(self, *args):
         size = QtWidgets.QStyledItemDelegate.sizeHint(self, *args)
@@ -656,12 +782,21 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
                 self.commitData.emit(obj)
                 self.closeEditor.emit(obj, QtWidgets.QStyledItemDelegate.EditPreviousItem)
                 return True
+            elif event.key() == QtCore.Qt.Key_Escape:
+                self.cancellation_in_progress = True
+                obj.cancel()
+                self.cancellation_in_progress = False
         return QtWidgets.QStyledItemDelegate.eventFilter(self, obj, event)
 
     def createEditor(self, parent, option, index):
-        return Editor(parent)
+        return Editor(parent, index, self)
 
     def setEditorData(self, editor, index):
+        if editor.initial_data is not None:
+            # Only set data once, and allow the editor to commit multiple times
+            # (otherwise commitData will mess with selections and cursors by this being
+            # called multiple times).
+            return
         editor.setPlainText(index.data())
         font = index.data(QtCore.Qt.FontRole)
         default_font = qapplication.font(self.parent())
@@ -673,6 +808,7 @@ class ItemDelegate(QtWidgets.QStyledItemDelegate):
         padding = (self.MIN_ROW_HEIGHT - font_height) / 2 - 1
         editor.document().setDocumentMargin(padding)
         editor.selectAll()
+        editor.initial_data = index.data()
         
     def setModelData(self, editor, model, index):
         model.setData(index, editor.toPlainText())
@@ -946,10 +1082,18 @@ class GroupTab(object):
         name_index = index.sibling(index.row(), self.GLOBALS_COL_NAME)
         name_item = self.globals_model.itemFromIndex(name_index)
         global_name = name_item.text()
+        # If this change is due to the user cancelling editing, then treat it as
+        # non-interactive:
+        if self.ui.tableView_globals.itemDelegate().cancellation_in_progress:
+            interactive = False
+        else:
+            interactive = True
         # Ensure the value actually changed, rather than something else about
         # the item:
         if new_value != previous_value:
-            self.change_global_value(global_name, previous_value, new_value)
+            self.change_global_value(
+                global_name, previous_value, new_value, interactive
+            )
 
     def on_globals_model_units_changed(self, item):
         index = item.index()
