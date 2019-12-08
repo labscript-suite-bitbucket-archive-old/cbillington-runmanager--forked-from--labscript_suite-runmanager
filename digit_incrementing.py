@@ -86,37 +86,12 @@ def increment_at_index(src, index, increment):
     start, end, base = getnum(src, index)
     if start is None:
         return src, 0
+
     expr = src[start:end]
-    value = ast.literal_eval(expr)
 
-    # If the string has any lower case hex then we will output lower case hex:
-    if base == 16 and any(s in string.ascii_lowercase for s in expr[2:]):
-        hex_lower = True
-    else:
-        hex_lower = False
-
-    if isinstance(value, int):
-        if expr == 'True':
-            result = 'False'
-        elif expr == 'False':
-            result = 'True'
-        else:
-            exponent = end - index - expr[index:].count('_') - 1
-            value += increment * base ** exponent
-            if base == 2:
-                result = expr[:2] + bin(value)[2:]
-            elif base == 8:
-                result = expr[:2] + oct(value)[2:]
-            elif base == 16:
-                if hex_lower:
-                    result = expr[:2] + hex(value)[2:].lower()
-                else:
-                    result = expr[:2] + hex(value)[2:].upper()
-            else:
-                result = str(value)
-    elif isinstance(value, float):
+    if base == 10:
         decimalpoint = start + expr.find('.')
-        if decimalpoint == -1:
+        if decimalpoint == start -1:
             decimalpoint = end
         if decimalpoint > index:
             exponent = decimalpoint - index - expr[index:decimalpoint].count('_') - 1
@@ -131,8 +106,40 @@ def increment_at_index(src, index, increment):
         result = str(value)
         setcontext(orig_context)
 
-    if expr.startswith('+') and not result.startswith('-'):
-        result = '+' + result
+        # Leading zeros are allowed in float exponents. If it has leading zeros, let's
+        # pad our result out to the same length:
+        digits_only = expr.lstrip('+-').replace('_', '')
+        if digits_only.startswith('0'):
+            result = result.lstrip('+-').zfill(len(digits_only))
+            if value < 0:
+                result = '-' + result
+
+        # Preserve redundant + signs in floating point exponents
+        if expr.startswith('+') and not result.startswith('-'):
+            result = '+' + result
+
+    elif expr == 'True':
+        result = 'False'
+    elif expr == 'False':
+        result = 'True'
+    else:
+        value = ast.literal_eval(expr)
+        exponent = end - index - expr[index:].count('_') - 1
+        value += increment * base ** exponent
+        if base == 2:
+            result = expr[:2] + bin(value)[2:]
+        elif base == 8:
+            result = expr[:2] + oct(value)[2:]
+        elif base == 16:
+            # If the string has any lower case hex then we will output lower case hex:
+            if any(s in string.ascii_lowercase for s in expr[2:]):
+                result = expr[:2] + hex(value)[2:].lower()
+            else:
+                result = expr[:2] + hex(value)[2:].upper()
+        else:
+            result = str(value)
+    
+    
 
     # How much of the resulting expression is actual digits, vs base prefixes and sign?
     prefix = 0
@@ -206,8 +213,10 @@ if __name__ == '__main__':
         ("1.001", 4, -1, "1.000", 0), # Should not throw away these zeros
         ("1 + True", 4, -1, "1 + False", 1), # bools
         ("1 + False", 8, -1, "1 + True", -1), # bools
-        ("-0e2", 1, +1, "1e2", -1), # Not sure why it's choking on this
-        ("-1.1e2", 3, +1, "-1.0e2", 0) # Not sure why it's choking on this
+        ("-0e2", 1, +1, "1e2", -1), # Correctly compute decimal point with leading -
+        ("-1.1e2", 3, +1, "-1.0e2", 0), # Another example of the above
+        ("1e00", 3, +1,"1e01", 0), # keep redundant leading zeros in exponents
+        ("1e+0_0_1", 7, +1,"1e+0_0_2", 0) # Deal with this monstrosity
     ]
 
     print(
