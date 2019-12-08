@@ -53,7 +53,7 @@ def getnum(src, index):
                             if pos < index:
                                 start += pos + 1
                             else:
-                                end = pos
+                                end = start + pos
                     # Must be an actual digit at index, not a decimal point, underscore, or
                     # the 0 in the prefix of hex/binary/octal literals
                     if (
@@ -205,7 +205,9 @@ if __name__ == '__main__':
         ("1 + 1", 4, +1, "1 + 2", 0), # Preceding text shouldn't matter
         ("1.001", 4, -1, "1.000", 0), # Should not throw away these zeros
         ("1 + True", 4, -1, "1 + False", 1), # bools
-        ("1 + False", 8, -1, "1 + True", -1) # bools
+        ("1 + False", 8, -1, "1 + True", -1), # bools
+        ("-0e2", 1, +1, "1e2", -1), # Not sure why it's choking on this
+        ("-1.1e2", 3, +1, "-1.0e2", 0) # Not sure why it's choking on this
     ]
 
     print(
