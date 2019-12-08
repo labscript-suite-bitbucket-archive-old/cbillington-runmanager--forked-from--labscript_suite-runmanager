@@ -91,12 +91,12 @@ def increment_at_index(src, index, increment):
 
     if base == 10:
         decimalpoint = start + expr.find('.')
-        if decimalpoint == start -1:
+        if decimalpoint == start - 1:
             decimalpoint = end
         if decimalpoint > index:
             exponent = decimalpoint - index - expr[index:decimalpoint].count('_') - 1
         else:
-            exponent = decimalpoint - index - expr[decimalpoint:index].count('_')
+            exponent = decimalpoint - index + expr[decimalpoint:index].count('_')
         if len(expr) > decimal_context.prec:
             decimal_context.prec = len(expr) + 5
 
@@ -216,7 +216,8 @@ if __name__ == '__main__':
         ("-0e2", 1, +1, "1e2", -1), # Correctly compute decimal point with leading -
         ("-1.1e2", 3, +1, "-1.0e2", 0), # Another example of the above
         ("1e00", 3, +1,"1e01", 0), # keep redundant leading zeros in exponents
-        ("1e+0_0_1", 7, +1,"1e+0_0_2", 0) # Deal with this monstrosity
+        ("1e+0_0_1", 7, +1,"1e+0_0_2", 0), # Deal with this monstrosity
+        ("1.99_88", 5, +1,"1.99_98", 0) # Underscores after the decimal point
     ]
 
     print(
