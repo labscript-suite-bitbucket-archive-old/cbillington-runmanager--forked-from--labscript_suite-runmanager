@@ -2,7 +2,7 @@ import string
 import tokenize
 import io
 import ast
-from decimal import Context
+from decimal import Context, Decimal, setcontext, getcontext
 
 decimal_context = Context()
 
@@ -97,7 +97,7 @@ def increment_at_index(src, index, increment):
         else:
             result = str(value)
     elif isinstance(value, float):
-        decimalpoint = expr.find('.')
+        decimalpoint = start + expr.find('.')
         if decimalpoint == -1:
             decimalpoint = end
         if decimalpoint > index:
@@ -107,12 +107,12 @@ def increment_at_index(src, index, increment):
         if len(expr) > decimal_context.prec:
             decimal_context.prec = len(expr) + 5
 
-        value = (
-            decimal_context.create_decimal(expr)
-            + increment * decimal_context.create_decimal(10) ** exponent
-        )
-
+        orig_context = getcontext()
+        setcontext(decimal_context)
+        value = Decimal(expr) + increment * Decimal(10) ** exponent
         result = str(value)
+        setcontext(orig_context)
+
     if expr.startswith('+') and not result.startswith('-'):
         result = '+' + result
 
@@ -183,6 +183,8 @@ if __name__ == '__main__':
         ("0xab_cd", 3, +1, "0xac_cd", 0),  # Underscores in hex
         ("-11.0", 1, +1, "-1.0", 0),  # Offset shouldn't move the cursor to a minus sign
         ("0x10100", 2, -1, "0x100", 0,),  # Offset shouldn't move us over the prefix
+        ("1 + 1.0", 6, +1, "1 + 1.1", 0), # Preceding text shouldn't matter
+        ("1 + 1", 4, +1, "1 + 2", 0) # Preceding text shouldn't matter
     ]
 
     print(
