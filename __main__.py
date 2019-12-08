@@ -688,7 +688,8 @@ class Editor(QtWidgets.QTextEdit):
             # lagging when the user holds down the key:
             if self._commit_timer is None:
                 self._commit_timer = QtCore.QTimer.singleShot(0, self.commit_data)
-        return QtWidgets.QTextEdit.keyPressEvent(self, event)
+        else:
+            return QtWidgets.QTextEdit.keyPressEvent(self, event)
 
     def commit_data(self):
         self.delegate.commitData.emit(self)
