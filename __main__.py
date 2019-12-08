@@ -602,39 +602,33 @@ class Editor(QtWidgets.QTextEdit):
         cursor = self.textCursor()
         pos = cursor.position()
         text = self.toPlainText()
-        if (
-            pos
-            and pos == cursor.anchor()
-            and '\n' not in text
-            and is_digit(text, pos - 1)
-        ):
-            cursor.clearSelection()
-            cursor.movePosition(cursor.PreviousCharacter, cursor.KeepAnchor)
-            selection = QtWidgets.QTextEdit.ExtraSelection()
-            selection.cursor = cursor
-            selection.format.setProperty(QtGui.QTextFormat.FullWidthSelection, True)
-            selection.format.setBackground(QtGui.QBrush(QtGui.QColor("#eeeeee")))
-            self.setExtraSelections([selection])
-
-        else:
-            self.setExtraSelections([])
+        if pos and pos == cursor.anchor() and '\n' not in text:
+            digit, start, end = is_digit(text, pos - 1)
+            if digit:
+                cursor.clearSelection()
+                cursor.setPosition(end)
+                cursor.movePosition(
+                    cursor.PreviousCharacter, cursor.KeepAnchor, end - start
+                )
+                selection = QtWidgets.QTextEdit.ExtraSelection()
+                selection.cursor = cursor
+                selection.format.setProperty(QtGui.QTextFormat.FullWidthSelection, True)
+                selection.format.setBackground(QtGui.QBrush(QtGui.QColor("#eeeeee")))
+                self.setExtraSelections([selection])
+                return
+        self.setExtraSelections([])
 
     def paintEvent(self, event):
         result =  QtWidgets.QTextEdit.paintEvent(self, event)
-        if self.extraSelections():
-            # Draw little arrows above and below the current digit:
-            cursor = self.textCursor()
-            cursor.setPosition(cursor.position() - 1)
-            char = self.toPlainText()[cursor.position()]
-            char_width = QtGui.QFontMetrics(self.currentFont()).width(char)
-            cursor_rect = self.cursorRect(cursor)
+        extra_selections = self.extraSelections()
+        if extra_selections:
+            cursor1 = extra_selections[0].cursor
+            cursor2 = self.textCursor()
+            cursor2.setPosition(cursor1.anchor())
+            rect1 = self.cursorRect(cursor1)
+            rect2 = self.cursorRect(cursor2)
+            rect = rect1.united(rect2)
 
-            rect = QtCore.QRectF(
-                cursor_rect.x() - 0.5,
-                cursor_rect.y(),
-                char_width,
-                cursor_rect.height(),
-            )
             top_middle = QtCore.QPointF((rect.left() + rect.right()) / 2, rect.top())
             bottom_middle = QtCore.QPointF(
                 (rect.left() + rect.right()) / 2, rect.bottom()
@@ -648,16 +642,8 @@ class Editor(QtWidgets.QTextEdit):
             painter.setBrush(QtGui.QBrush(QtGui.QColor("#000000")))
             painter.setPen(QtCore.Qt.NoPen)
             painter.setRenderHints(painter.Antialiasing)
-            painter.drawPolygon(
-                top_middle + triangle[0],
-                top_middle + triangle[1],
-                top_middle + triangle[2],
-            )
-            painter.drawPolygon(
-                bottom_middle - triangle[0],
-                bottom_middle - triangle[1],
-                bottom_middle - triangle[2],
-            )
+            painter.drawPolygon(*[top_middle + triangle[i] for i in range(3)])
+            painter.drawPolygon(*[bottom_middle - triangle[i] for i in range(3)])
             
             painter.end()
         return result

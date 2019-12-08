@@ -11,9 +11,16 @@ digits_by_base = {2: '01', 8: string.octdigits, 10: string.digits, 16: string.he
 
 def is_digit(src, index):
     """Return whether the character at the given index is a digit of a syntactically
-    valid Python numerical literal"""
-    _, _, base = getnum(src, index)
-    return base is not None and src[index] in digits_by_base[base]
+    valid Python numerical literal, or is a bool (True or False), which we are kind of
+    treating like integers modulo 2. Also returns the range of the digit in the src,
+    which of course is just index:index+1 for a digit, but i the extent of the bool
+    literal if it's a bool"""
+    start, end, base = getnum(src, index)
+    if base is not None and src[index] in digits_by_base[base]:
+        return True, index, index+1
+    elif start is not None:
+        return True, start, end
+    return False, None, None
 
 
 def getnum(src, index):
@@ -22,41 +29,45 @@ def getnum(src, index):
     immediately precedes the literal, it will be included. The significand and exponent
     of floats in exponential notation will be treated as separate literals, and any
     positive sign present before the exponent will be included in the result (positive
-    signs before other literals will not be included)."""
+    signs before other literals will not be included). If there is a boolean literal
+    (True or False) at index, then return it, but with None for the base."""
     assert '\n' not in src
     assert index < len(src)
     try:
         for tok in tokenize.generate_tokens(io.StringIO(src).readline):
             start = tok.start[1]
             end = tok.end[1]
-            if start <= index < end and tok.type == tokenize.NUMBER:
-                expr = tok.string
-                if '0x' in expr.lower():
-                    base = 16
-                elif '0o' in expr.lower():
-                    base = 8
-                elif '0b' in expr.lower():
-                    base = 2
-                else:
-                    base = 10
-                    if 'e' in expr.lower():
-                        pos = expr.lower().find('e')
-                        if pos < index:
-                            start += pos + 1
-                        else:
-                            end = pos
-                # Must be an actual digit at index, not a decimal point, underscore, or
-                # the 0 in the prefix of hex/binary/octal literals
-                if (
-                    src[index] not in digits_by_base[base]
-                    or base != 10
-                    and index == start
-                ):
-                    return None, None, None
-                if start:
-                    if src[start - 1] == '-':
-                        start -= 1
-                return start, end, base
+            if start <= index < end:
+                if tok.type == tokenize.NUMBER:
+                    expr = tok.string
+                    if '0x' in expr.lower():
+                        base = 16
+                    elif '0o' in expr.lower():
+                        base = 8
+                    elif '0b' in expr.lower():
+                        base = 2
+                    else:
+                        base = 10
+                        if 'e' in expr.lower():
+                            pos = expr.lower().find('e')
+                            if pos < index:
+                                start += pos + 1
+                            else:
+                                end = pos
+                    # Must be an actual digit at index, not a decimal point, underscore, or
+                    # the 0 in the prefix of hex/binary/octal literals
+                    if (
+                        src[index] not in digits_by_base[base]
+                        or base != 10
+                        and index == start
+                    ):
+                        return None, None, None
+                    if start:
+                        if src[start - 1] == '-':
+                            start -= 1
+                    return start, end, base
+                elif tok.type == tokenize.NAME and tok.string in ('True', 'False'):
+                    return start, end, None
     except tokenize.TokenError:
         # End of incomplete expression. We are done.
         pass
@@ -66,12 +77,14 @@ def getnum(src, index):
 def increment_at_index(src, index, increment):
     """Given a single-line source and an index, if there is a digit of a numeric literal
     at that index, increment (if increment=+1) or decrement (if increment=-1) it in that
-    digit, otherwise preserving the source """
+    digit, otherwise preserving the source. If there is a boolean literal (True or
+    False), invert it. Return the new source and the offset for how much the cursor
+    should move as a result of the transformation."""
     assert increment in (+1, -1)
     if not src:
         return src, 0
     start, end, base = getnum(src, index)
-    if base is None:
+    if start is None:
         return src, 0
     expr = src[start:end]
     value = ast.literal_eval(expr)
@@ -83,19 +96,24 @@ def increment_at_index(src, index, increment):
         hex_lower = False
 
     if isinstance(value, int):
-        exponent = end - index - expr[index:].count('_') - 1
-        value += increment * base ** exponent
-        if base == 2:
-            result = expr[:2] + bin(value)[2:]
-        elif base == 8:
-            result = expr[:2] + oct(value)[2:]
-        elif base == 16:
-            if hex_lower:
-                result = expr[:2] + hex(value)[2:].lower()
-            else:
-                result = expr[:2] + hex(value)[2:].upper()
+        if expr == 'True':
+            result = 'False'
+        elif expr == 'False':
+            result = 'True'
         else:
-            result = str(value)
+            exponent = end - index - expr[index:].count('_') - 1
+            value += increment * base ** exponent
+            if base == 2:
+                result = expr[:2] + bin(value)[2:]
+            elif base == 8:
+                result = expr[:2] + oct(value)[2:]
+            elif base == 16:
+                if hex_lower:
+                    result = expr[:2] + hex(value)[2:].lower()
+                else:
+                    result = expr[:2] + hex(value)[2:].upper()
+            else:
+                result = str(value)
     elif isinstance(value, float):
         decimalpoint = start + expr.find('.')
         if decimalpoint == -1:
@@ -185,7 +203,9 @@ if __name__ == '__main__':
         ("0x10100", 2, -1, "0x100", 0,),  # Offset shouldn't move us over the prefix
         ("1 + 1.0", 6, +1, "1 + 1.1", 0), # Preceding text shouldn't matter
         ("1 + 1", 4, +1, "1 + 2", 0), # Preceding text shouldn't matter
-        ("1.001", 4, -1, "1.000", 0) # Should not throw away these zeros
+        ("1.001", 4, -1, "1.000", 0), # Should not throw away these zeros
+        ("1 + True", 4, -1, "1 + False", 1), # bools
+        ("1 + False", 8, -1, "1 + True", -1) # bools
     ]
 
     print(
