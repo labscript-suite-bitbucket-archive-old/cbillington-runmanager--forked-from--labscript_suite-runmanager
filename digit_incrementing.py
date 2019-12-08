@@ -184,7 +184,8 @@ if __name__ == '__main__':
         ("-11.0", 1, +1, "-1.0", 0),  # Offset shouldn't move the cursor to a minus sign
         ("0x10100", 2, -1, "0x100", 0,),  # Offset shouldn't move us over the prefix
         ("1 + 1.0", 6, +1, "1 + 1.1", 0), # Preceding text shouldn't matter
-        ("1 + 1", 4, +1, "1 + 2", 0) # Preceding text shouldn't matter
+        ("1 + 1", 4, +1, "1 + 2", 0), # Preceding text shouldn't matter
+        ("1.001", 4, -1, "1.000", 0) # Should not throw away these zeros
     ]
 
     print(
