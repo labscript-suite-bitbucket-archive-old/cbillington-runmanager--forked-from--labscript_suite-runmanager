@@ -7,7 +7,7 @@ from labscript_utils.labconfig import LabConfig
 class Client(ZMQClient):
     """A ZMQClient for communication with runmanager"""
 
-    def __init__(self, host=None, port=None):
+    def __init__(self, host=None, port=None, default_timeout=15):
         ZMQClient.__init__(self)
         if host is None:
             host = LabConfig().get('servers', 'runmanager', fallback='localhost')
@@ -15,9 +15,13 @@ class Client(ZMQClient):
             port = LabConfig().getint('ports', 'runmanager', fallback=DEFAULT_PORT)
         self.host = host
         self.port = port
+        self.default_timeout = default_timeout
 
     def request(self, command, *args, **kwargs):
-        return self.get(self.port, self.host, data=[command, args, kwargs], timeout=15)
+        timeout = kwargs.pop('timeout', self.default_timeout)
+        return self.get(
+            self.port, self.host, data=[command, args, kwargs], timeout=timeout
+        )
 
     def say_hello(self):
         """Ping the runmanager server for a response"""
@@ -112,7 +116,7 @@ class Client(ZMQClient):
         from the queue but has not finished running. This is so that if runmanager's
         compilation queue is configured for just-in-time compilation, it can compile and
         submit the next shot when BLACS has a certain number of shots left."""
-        return self.request('advise_BLACS_queue_size', value)
+        return self.request('advise_BLACS_shots_remaining', value)
 
 _default_client = Client()
 
@@ -138,6 +142,7 @@ set_shot_output_folder = _default_client.set_shot_output_folder
 error_in_globals = _default_client.error_in_globals
 is_output_folder_default = _default_client.is_output_folder_default
 reset_shot_output_folder = _default_client.reset_shot_output_folder
+advise_BLACS_shots_remaining = _default_client.advise_BLACS_shots_remaining
 
 if __name__ == '__main__':
     # Test
